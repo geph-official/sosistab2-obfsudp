@@ -94,7 +94,8 @@ impl ObfsAead {
             minimum_len
         } else {
             rand::thread_rng().gen_range(minimum_len, max_len + 1)
-        };
+        }
+        .min(minimum_len + 255);
         let padding_len = target_len - minimum_len;
         let mut padded_msg = Vec::with_capacity(target_len);
         padded_msg.push(padding_len as u8);
@@ -188,14 +189,16 @@ mod tests {
         let obfs_aead = ObfsAead::new(&key);
 
         // Generate a random test message
-        let mut msg = [0u8; 64];
-        rand::thread_rng().fill_bytes(&mut msg);
+        for _ in 0..100 {
+            let mut msg = vec![0u8; rand::thread_rng().gen_range(0, 1400)];
+            rand::thread_rng().fill_bytes(&mut msg);
 
-        // Encrypt the test message
-        let encrypted_msg = obfs_aead.encrypt(&msg);
+            // Encrypt the test message
+            let encrypted_msg = obfs_aead.encrypt(&msg);
 
-        // Decrypt the encrypted message
-        let decrypted_result = obfs_aead.decrypt(&encrypted_msg).unwrap();
-        assert_eq!(&decrypted_result[..], &msg);
+            // Decrypt the encrypted message
+            let decrypted_result = obfs_aead.decrypt(&encrypted_msg).unwrap();
+            assert_eq!(&decrypted_result[..], &msg);
+        }
     }
 }

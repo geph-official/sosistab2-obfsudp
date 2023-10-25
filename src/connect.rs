@@ -159,7 +159,7 @@ pub async fn client_loop(
         }
     };
     let dn_loop = async {
-        let mut buf = [0u8; 2048];
+        let mut buf = [0u8; 65536];
         loop {
             let frame_fut = async {
                 let (n, _) = socket.recv_from(&mut buf).await?;
