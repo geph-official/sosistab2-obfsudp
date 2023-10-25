@@ -1,11 +1,11 @@
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
     Arc,
 };
 
 use bytes::Bytes;
 use parking_lot::Mutex;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 use replay_filter::ReplayFilter;
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
 use sosistab2::crypt::AeadError;
@@ -67,6 +67,7 @@ impl ObfsDecrypter {
 #[derive(Debug, Clone)]
 pub struct ObfsAead {
     key: Arc<LessSafeKey>,
+    max_len: Arc<AtomicUsize>,
 }
 
 impl ObfsAead {
@@ -74,6 +75,7 @@ impl ObfsAead {
         let ubk = UnboundKey::new(&CHACHA20_POLY1305, key).unwrap();
         Self {
             key: Arc::new(LessSafeKey::new(ubk)),
+            max_len: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -82,11 +84,19 @@ impl ObfsAead {
         let mut nonce = [0; 12];
         rand::thread_rng().fill_bytes(&mut nonce);
 
-        // make an output. it starts out containing the padding.
-        // we "round up" to ensure that long term averages cannot leak things either. regardless, this is very much "best effort"
-        let additional_padding = 128 - (msg.len().min(128));
-        let padding_len = additional_padding + (16 - msg.len() % 16) + rand::random::<usize>() % 16;
-        let mut padded_msg = Vec::with_capacity(1 + padding_len + msg.len() + 12);
+        // make an output. the padding is placed in the beginning.
+        let minimum_len = msg.len() + 1 + 12 + 16;
+        let max_len = self
+            .max_len
+            .fetch_max(minimum_len, Ordering::Relaxed)
+            .max(minimum_len);
+        let target_len = if msg.len() > 1300 {
+            minimum_len
+        } else {
+            rand::thread_rng().gen_range(minimum_len, max_len + 1)
+        };
+        let padding_len = target_len - minimum_len;
+        let mut padded_msg = Vec::with_capacity(target_len);
         padded_msg.push(padding_len as u8);
         padded_msg.resize(padding_len + 1, 0xff);
         padded_msg.extend_from_slice(msg);
@@ -100,6 +110,7 @@ impl ObfsAead {
             )
             .unwrap();
         padded_msg.extend_from_slice(&nonce);
+        assert_eq!(padded_msg.len(), target_len);
         padded_msg.into()
     }
 
@@ -155,12 +166,36 @@ pub fn triple_ecdh(
     blake3::hash(&to_hash)
 }
 
-pub const CLIENT_UP_KEY: &[u8; 32] = b"upload--------------------------";
-pub const CLIENT_DN_KEY: &[u8; 32] = b"download------------------------";
+const CLIENT_UP_KEY: &[u8; 32] = b"upload--------------------------";
+const CLIENT_DN_KEY: &[u8; 32] = b"download------------------------";
 
 pub fn upify_shared_secret(shared_secret: &[u8]) -> blake3::Hash {
     blake3::keyed_hash(CLIENT_UP_KEY, shared_secret)
 }
 pub fn dnify_shared_secret(shared_secret: &[u8]) -> blake3::Hash {
     blake3::keyed_hash(CLIENT_DN_KEY, shared_secret)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_obfs_aead_encrypt_decrypt() {
+        // Generate a random 256-bit key
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+
+        let obfs_aead = ObfsAead::new(&key);
+
+        // Generate a random test message
+        let mut msg = [0u8; 64];
+        rand::thread_rng().fill_bytes(&mut msg);
+
+        // Encrypt the test message
+        let encrypted_msg = obfs_aead.encrypt(&msg);
+
+        // Decrypt the encrypted message
+        let decrypted_result = obfs_aead.decrypt(&encrypted_msg).unwrap();
+        assert_eq!(&decrypted_result[..], &msg);
+    }
 }

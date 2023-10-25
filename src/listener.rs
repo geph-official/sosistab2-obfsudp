@@ -168,7 +168,7 @@ async fn handle_server_handshake(
 
             let token = TokenInfo {
                 sess_key: Bytes::copy_from_slice(shared_secret.as_bytes()),
-                init_time_ms: timestamp,
+                init_timestamp: timestamp,
                 version,
             };
             let encrypted_token = token.encrypt(token_key);
@@ -191,7 +191,7 @@ async fn handle_server_handshake(
             metadata,
         } => {
             let token_info = TokenInfo::decrypt(token_key, &resume_token)?;
-            if token_info.init_time_ms.abs_diff(current_timestamp) > 60 {
+            if token_info.init_timestamp.abs_diff(current_timestamp) > 60 {
                 anyhow::bail!("ClientResume replay detected!")
             }
             let (send_upcoded, recv_upcoded) = smol::channel::unbounded();
@@ -226,7 +226,7 @@ async fn handle_server_handshake(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TokenInfo {
     sess_key: Bytes,
-    init_time_ms: u64,
+    init_timestamp: u64,
     version: u64,
 }
 

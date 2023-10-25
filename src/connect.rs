@@ -13,7 +13,10 @@ use smol_timeout::TimeoutExt;
 use stdcode::StdcodeSerializeExt;
 
 use crate::{
-    crypt::{triple_ecdh, ObfsAead, ObfsDecrypter, ObfsEncrypter, CLIENT_DN_KEY, CLIENT_UP_KEY},
+    crypt::{
+        dnify_shared_secret, triple_ecdh, upify_shared_secret, ObfsAead, ObfsDecrypter,
+        ObfsEncrypter,
+    },
     frame::{HandshakeFrame, ObfsUdpFrame},
     ObfsUdpPipe, ObfsUdpPublic,
 };
@@ -140,8 +143,8 @@ pub async fn client_loop(
     server_addr: SocketAddr,
     shared_secret: blake3::Hash,
 ) -> anyhow::Result<()> {
-    let up_key = blake3::keyed_hash(CLIENT_UP_KEY, shared_secret.as_bytes());
-    let dn_key = blake3::keyed_hash(CLIENT_DN_KEY, shared_secret.as_bytes());
+    let up_key = upify_shared_secret(shared_secret.as_bytes());
+    let dn_key = dnify_shared_secret(shared_secret.as_bytes());
     let enc = ObfsEncrypter::new(ObfsAead::new(up_key.as_bytes()));
     let dec = ObfsDecrypter::new(ObfsAead::new(dn_key.as_bytes()));
 
