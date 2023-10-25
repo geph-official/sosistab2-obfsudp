@@ -1,12 +1,15 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use ahash::AHashMap;
 use bytes::Bytes;
+
+use moka::sync::Cache;
+use once_cell::sync::Lazy;
 use probability::distribution::Distribution;
+use reed_solomon_erasure::galois_8::ReedSolomon;
 
 use crate::{batchtimer::BatchTimer, frame::ObfsUdpFrame};
 
-use super::{pre_encode, wrapped::WrappedReedSolomon};
+use super::pre_encode;
 
 // forward error correction
 pub struct FecEncoder {
@@ -83,8 +86,6 @@ impl FecEncoder {
 /// A forward error correction encoder. Retains internal state for memoization, memory pooling etc.
 #[derive(Debug)]
 pub struct FrameEncoder {
-    // table mapping current loss in pct + run length => overhead
-    rate_table: AHashMap<(u8, usize), usize>,
     // target loss rate
     target_loss: u8,
 }
@@ -92,10 +93,7 @@ pub struct FrameEncoder {
 impl FrameEncoder {
     /// Creates a new Encoder at the given loss level.
     pub fn new(target_loss: u8) -> Self {
-        FrameEncoder {
-            rate_table: AHashMap::default(),
-            target_loss,
-        }
+        FrameEncoder { target_loss }
     }
 
     /// Encodes a slice of packets into more packets.
@@ -123,13 +121,15 @@ impl FrameEncoder {
         //     data_shards,
         //     parity_shards
         // );
-        if parity_shards > 0 {
-            let encoder = WrappedReedSolomon::new_cached(data_shards, parity_shards);
+        if parity_shards > 0 && data_shards > 0 {
+            static REED_SOLOMONS: Lazy<Cache<(usize, usize), Arc<ReedSolomon>>> =
+                Lazy::new(|| Cache::new(100));
+
+            let encoder = REED_SOLOMONS.get_with((data_shards, parity_shards), || {
+                Arc::new(ReedSolomon::new(data_shards, parity_shards).unwrap())
+            });
             // do the encoding
-            encoder
-                .get_inner()
-                .encode(&mut padded_pkts)
-                .expect("can't encode");
+            encoder.encode(&mut padded_pkts).expect("can't encode");
         }
         // return
         let mut toret = Vec::with_capacity(data_shards + parity_shards);
@@ -142,10 +142,11 @@ impl FrameEncoder {
         log::trace!("repair_len({measured_loss}, {run_len})");
         let measured_loss = (measured_loss * 255.0) as u8;
         let target_loss = self.target_loss;
-        let result = (*self
-            .rate_table
-            .entry((measured_loss, run_len))
-            .or_insert_with(|| {
+
+        static RATE_TABLE: Lazy<Cache<(u8, usize), usize>> = Lazy::new(|| Cache::new(100));
+
+        let result = RATE_TABLE
+            .get_with((measured_loss, run_len), || {
                 for additional_len in 0.. {
                     let distro = probability::distribution::Binomial::with_failure(
                         run_len + additional_len,
@@ -157,9 +158,9 @@ impl FrameEncoder {
                     }
                 }
                 panic!()
-            }))
-        .min(255 - run_len)
-        .min(run_len * 2);
+            })
+            .min(255 - run_len)
+            .min(run_len * 2);
         log::trace!("expand batch of {} with {} parities", run_len, result);
         result
     }

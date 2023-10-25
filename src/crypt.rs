@@ -13,31 +13,6 @@ use stdcode::StdcodeSerializeExt;
 
 use super::frame::ObfsUdpFrame;
 
-#[derive(Debug, Clone)]
-/// A generator of symmetric keys.
-pub struct SymmetricFromAsymmetric(x25519_dalek::PublicKey);
-
-impl SymmetricFromAsymmetric {
-    /// Create a new cookie based on a public key.
-    pub fn new(pk: x25519_dalek::PublicKey) -> SymmetricFromAsymmetric {
-        SymmetricFromAsymmetric(pk)
-    }
-
-    /// Generate a bunch of symmetric keys given the current time, for client to server.
-    pub fn generate_c2s(&self) -> [u8; 32] {
-        self.generate_temp_key("sosistab-2-c2s")
-    }
-
-    /// Generate a bunch of symmetric keys given the current time, for server to client.
-    pub fn generate_s2c(&self) -> [u8; 32] {
-        self.generate_temp_key("sosistab-2-s2c")
-    }
-
-    fn generate_temp_key(&self, ctx: &str) -> [u8; 32] {
-        blake3::derive_key(ctx, self.0.as_bytes())
-    }
-}
-
 /// An encrypter of obfuscated packets.
 #[derive(Clone)]
 pub struct ObfsEncrypter {

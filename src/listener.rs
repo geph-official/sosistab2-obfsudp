@@ -143,7 +143,7 @@ async fn handle_server_handshake(
     let ptext = c2s_outer.decrypt(pkt)?;
     log::debug!("it really was a handshake!");
     if REPLAY_FILTER.lock().recently_seen(&ptext) {
-        log::warn!("skipping packet catched by the replay filter!");
+        anyhow::bail!("skipping packet catched by the replay filter!");
     }
     let current_timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -157,12 +157,8 @@ async fn handle_server_handshake(
             version,
             timestamp,
         } => {
-            log::debug!(
-                "my time {current_timestamp}, their time {timestamp}, diff {}",
-                current_timestamp.abs_diff(timestamp)
-            );
             if current_timestamp.abs_diff(timestamp) > 60 {
-                anyhow::bail!("ClientHello with skewed timestamp received")
+                anyhow::bail!("ClientHello with skewed timestamp received; my time {current_timestamp}, their time {timestamp}, diff {}", current_timestamp.abs_diff(timestamp))
             }
 
             let server_eph_sk = x25519_dalek::StaticSecret::new(rand::thread_rng());

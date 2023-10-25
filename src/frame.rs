@@ -56,7 +56,7 @@ impl ObfsUdpFrame {
 /// Frame sent as a session-negotiation message. This is always encrypted with the cookie.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum HandshakeFrame {
-    /// Frame sent from client to server when opening a connection. This is always globally encrypted.
+    /// Frame sent from client to server when opening a connection.
     ClientHello {
         long_pk: x25519_dalek::PublicKey,
         eph_pk: x25519_dalek::PublicKey,
@@ -74,20 +74,9 @@ pub enum HandshakeFrame {
         client_commitment: [u8; 32],
     },
 
-    /// Frame sent from client to server to either signal roaming, or complete an initial handshake. This is globally encrypted.
-    /// Clients should send a ClientResume every time they suspect that their IP has changed.
+    /// Frame sent from client to server to complete an initial handshake.
     ClientResume {
         resume_token: Bytes,
         metadata: String,
     },
-}
-
-impl HandshakeFrame {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        stdcode::serialize(self).unwrap()
-    }
-
-    pub fn from_bytes(bts: &[u8]) -> anyhow::Result<Self> {
-        Ok(stdcode::deserialize(bts)?)
-    }
 }

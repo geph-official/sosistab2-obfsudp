@@ -17,6 +17,8 @@ hex = "0.4.3"
 itertools = "0.11.0"
 log = "0.4.20"
 lru = "0.12.0"
+
+moka = {version="0.12.1", features=["sync"]}
 once_cell = "1.18.0"
 parking_lot = "0.12.1"
 priority-queue = "1.3.2"
