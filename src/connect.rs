@@ -83,7 +83,7 @@ pub async fn client_connect(
                 log::trace!("***** server hello received, calculating stuff ******");
                 // finish off the handshake
                 let client_resp = init_enc.encrypt(
-                    &HandshakeFrame::ClientResume {
+                    &HandshakeFrame::Finalize {
                         resume_token,
                         metadata: metadata.into(),
                     }

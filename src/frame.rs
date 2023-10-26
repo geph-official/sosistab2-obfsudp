@@ -75,7 +75,7 @@ pub enum HandshakeFrame {
     },
 
     /// Frame sent from client to server to complete an initial handshake.
-    ClientResume {
+    Finalize {
         resume_token: Bytes,
         metadata: String,
     },

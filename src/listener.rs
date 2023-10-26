@@ -186,7 +186,7 @@ async fn handle_server_handshake(
         HandshakeFrame::ServerHello { .. } => {
             anyhow::bail!("server got server hello")
         }
-        HandshakeFrame::ClientResume {
+        HandshakeFrame::Finalize {
             resume_token,
             metadata,
         } => {
