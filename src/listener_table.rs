@@ -67,8 +67,8 @@ impl PipeTable {
     }
 
     /// Attempts to decode and forward the packet to an existing pipe. If
-    pub async fn try_forward(&mut self, pkt: &[u8], client_addr: SocketAddr) -> anyhow::Result<()> {
-        let table = self.table.upgradable_read();
+    pub fn try_forward(&mut self, pkt: &[u8], client_addr: SocketAddr) -> anyhow::Result<()> {
+        let table = self.table.read();
         let back = table
             .get(&client_addr)
             .context("no entry in the table with this client_addr")?;

@@ -148,17 +148,18 @@ pub async fn client_loop(
     let enc = ObfsEncrypter::new(ObfsAead::new(up_key.as_bytes()));
     let dec = ObfsDecrypter::new(ObfsAead::new(dn_key.as_bytes()));
 
-    let up_loop = async {
+    let socket_up = socket.clone();
+    let up_loop = async move {
         loop {
             let msg = recv_upcoded.recv().await.context("death in UDP up loop")?;
 
             let enc_msg = enc.encrypt(&msg);
-            if let Err(err) = socket.send_to(&enc_msg, server_addr).await {
+            if let Err(err) = socket_up.send_to(&enc_msg, server_addr).await {
                 log::error!("cannot send message: {:?}", err)
             }
         }
     };
-    let dn_loop = async {
+    let dn_loop = async move {
         let mut buf = [0u8; 65536];
         loop {
             let frame_fut = async {
@@ -182,5 +183,7 @@ pub async fn client_loop(
         }
     };
 
-    up_loop.race(dn_loop).await
+    smolscale::spawn(up_loop)
+        .race(smolscale::spawn(dn_loop))
+        .await
 }

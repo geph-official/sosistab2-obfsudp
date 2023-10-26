@@ -99,7 +99,7 @@ async fn listener_loop(
         let (n, client_addr) = socket.recv_from(&mut buf).await?;
         let pkt = &buf[..n];
         log::trace!("received a pkt!");
-        if let Err(err) = table.try_forward(pkt, client_addr).await {
+        if let Err(err) = table.try_forward(pkt, client_addr) {
             log::debug!("cannot forward packet from {client_addr} to an existing session ({err}), so decrypting as handshake");
             if let Err(err) = handle_server_handshake(
                 &socket,
