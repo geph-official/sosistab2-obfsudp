@@ -199,7 +199,7 @@ async fn pipe_loop(
         } else {
             loss
         };
-        log::debug!("loss of {:.4}", loss);
+
         let event = Event::fec_timeout(&mut fec_encoder, loss)
             .or(Event::ack_timeout(&mut ack_timer))
             .or(Event::new_in_packet(&recv_downcoded))
