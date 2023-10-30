@@ -99,6 +99,12 @@ impl StatsCalculator {
             total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
             total_latency += bucket.latency_sum;
             total_latency_squared += bucket.latency_squared_sum;
+            log::debug!(
+                "bucket acked = {}, lost {}, sent {}",
+                bucket.acked,
+                bucket.lost,
+                bucket.sent
+            );
         }
 
         let total_samples = total_samples.max(1);
