@@ -48,7 +48,8 @@ impl StatsCalculator {
 
     /// Adds a negative acknowledgement of a packet.
     pub fn add_nak(&mut self, seqno: u64) {
-        if let Some(&bucket_index) = self.sent_packets.get(&seqno) {
+        if let Some(&send_time) = self.sent_packets.get(&seqno) {
+            let bucket_index = send_time / BUCKET_SIZE_MS;
             if let Some(bucket) = self.buckets.get_mut(&bucket_index) {
                 bucket.lost += 1;
             }
