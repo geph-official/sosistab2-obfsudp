@@ -316,7 +316,7 @@ async fn pipe_loop(
                 }
 
                 Event::FecTimeout(parity_frames) => {
-                    if !parity_frames.is_empty {
+                    if !parity_frames.is_empty() {
                         log::debug!("FecTimeout; sending {} parities", parity_frames.len());
                     }
                     for parity_frame in parity_frames {
