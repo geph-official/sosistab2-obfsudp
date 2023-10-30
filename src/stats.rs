@@ -96,7 +96,7 @@ impl StatsCalculator {
 
         for bucket in self.buckets.values() {
             total_samples += bucket.acked;
-            total_loss += (bucket.lost as f64) / (bucket.acked as f64).max(1.0);
+            total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
             total_latency += bucket.latency_sum;
             total_latency_squared += bucket.latency_squared_sum;
         }
