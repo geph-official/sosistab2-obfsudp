@@ -94,20 +94,20 @@ impl StatsCalculator {
         let mut total_latency = 0.0f64;
         let mut total_latency_squared = 0.0f64;
 
-        for bucket in self.buckets.values() {
-            total_samples += bucket.acked;
-            total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
-            total_latency += bucket.latency_sum;
-            total_latency_squared += bucket.latency_squared_sum;
-            log::debug!(
-                "bucket acked = {}, lost {}, sent {}",
-                bucket.acked,
-                bucket.lost,
-                bucket.sent
-            );
-        }
+        // for bucket in self.buckets.values() {
+        //     total_samples += bucket.acked;
+        //     total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
+        //     total_latency += bucket.latency_sum;
+        //     total_latency_squared += bucket.latency_squared_sum;
+        //     log::debug!(
+        //         "bucket acked = {}, lost {}, sent {}",
+        //         bucket.acked,
+        //         bucket.lost,
+        //         bucket.sent
+        //     );
+        // }
 
-        let total_samples = total_samples.max(1);
+        // let total_samples = total_samples.max(1);
 
         let average_loss = total_loss / (self.buckets.len() as f64).max(1.0);
         let average_latency = total_latency / (total_samples as f64);
