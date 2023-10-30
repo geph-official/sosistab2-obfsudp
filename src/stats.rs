@@ -15,7 +15,7 @@ pub struct Bucket {
 pub struct StatsCalculator {
     dead: bool,
     buckets: BTreeMap<u64, Bucket>,
-    sent_packets: BTreeMap<u64, u64>, // To record when each packet was sent
+    send_times: BTreeMap<u64, u64>, // To record when each packet was sent
 }
 
 const BUCKET_SIZE_MS: u64 = 5000;
@@ -33,7 +33,7 @@ impl StatsCalculator {
 
     /// Adds an acknowledgement, along with a `time_offset` that represents the local delay before the acknowledgement was sent by the remote end.
     pub fn add_ack(&mut self, seqno: u64, time_offset: Duration) {
-        if let Some(&send_time) = self.sent_packets.get(&seqno) {
+        if let Some(&send_time) = self.send_times.get(&seqno) {
             let bucket_index = send_time / BUCKET_SIZE_MS;
             if let Some(bucket) = self.buckets.get_mut(&bucket_index) {
                 bucket.acked += 1;
@@ -47,7 +47,7 @@ impl StatsCalculator {
 
     /// Adds a negative acknowledgement of a packet.
     pub fn add_nak(&mut self, seqno: u64) {
-        if let Some(&bucket_index) = self.sent_packets.get(&seqno) {
+        if let Some(&bucket_index) = self.send_times.get(&seqno) {
             if let Some(bucket) = self.buckets.get_mut(&bucket_index) {
                 bucket.lost += 1;
             }
@@ -66,7 +66,7 @@ impl StatsCalculator {
             latency_squared_sum: 0.0,
         });
         bucket.sent += 1;
-        self.sent_packets.insert(seqno, bucket_index);
+        self.send_times.insert(seqno, sent_time);
 
         // If we have more than 60 buckets, remove the oldest one
         if self.buckets.len() > 60 {
@@ -74,8 +74,8 @@ impl StatsCalculator {
                 let bucket = self.buckets.remove(&bucket_index).unwrap();
 
                 for _ in 0..bucket.sent {
-                    if let Some((&seqno, _)) = self.sent_packets.iter().next() {
-                        self.sent_packets.remove(&seqno);
+                    if let Some((&seqno, _)) = self.send_times.iter().next() {
+                        self.send_times.remove(&seqno);
                     }
                 }
             }
