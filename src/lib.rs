@@ -199,7 +199,6 @@ async fn pipe_loop(
         } else {
             loss
         };
-        let loss = 0.0;
         log::debug!("loss of {:.4}", loss);
         let event = Event::fec_timeout(&mut fec_encoder, loss)
             .or(Event::ack_timeout(&mut ack_timer))
@@ -317,7 +316,7 @@ async fn pipe_loop(
                 }
 
                 Event::FecTimeout(parity_frames) => {
-                    log::trace!("FecTimeout; sending {} parities", parity_frames.len());
+                    log::debug!("FecTimeout; sending {} parities", parity_frames.len());
                     for parity_frame in parity_frames {
                         let _ = send_upcoded.try_send(parity_frame);
                     }
