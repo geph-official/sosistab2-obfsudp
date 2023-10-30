@@ -1,8 +1,9 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use std::{collections::BTreeMap, time::Instant};
 
 use once_cell::sync::Lazy;
 
+#[derive(Clone, Copy)]
 pub struct Bucket {
     sent: u64,
     acked: u64,
@@ -15,7 +16,7 @@ pub struct Bucket {
 pub struct StatsCalculator {
     dead: bool,
     buckets: BTreeMap<u64, Bucket>,
-    send_times: BTreeMap<u64, u64>, // To record when each packet was sent
+    sent_packets: BTreeMap<u64, u64>, // To record when each packet was sent
 }
 
 const BUCKET_SIZE_MS: u64 = 5000;
@@ -33,7 +34,7 @@ impl StatsCalculator {
 
     /// Adds an acknowledgement, along with a `time_offset` that represents the local delay before the acknowledgement was sent by the remote end.
     pub fn add_ack(&mut self, seqno: u64, time_offset: Duration) {
-        if let Some(&send_time) = self.send_times.get(&seqno) {
+        if let Some(&send_time) = self.sent_packets.get(&seqno) {
             let bucket_index = send_time / BUCKET_SIZE_MS;
             if let Some(bucket) = self.buckets.get_mut(&bucket_index) {
                 bucket.acked += 1;
@@ -47,7 +48,7 @@ impl StatsCalculator {
 
     /// Adds a negative acknowledgement of a packet.
     pub fn add_nak(&mut self, seqno: u64) {
-        if let Some(&bucket_index) = self.send_times.get(&seqno) {
+        if let Some(&bucket_index) = self.sent_packets.get(&seqno) {
             if let Some(bucket) = self.buckets.get_mut(&bucket_index) {
                 bucket.lost += 1;
             }
@@ -66,17 +67,15 @@ impl StatsCalculator {
             latency_squared_sum: 0.0,
         });
         bucket.sent += 1;
-        self.send_times.insert(seqno, sent_time);
+        self.sent_packets.insert(seqno, sent_time);
 
-        // If we have more than 60 buckets, remove the oldest one
+        // If we have too many buckets, remove the oldest one
         if self.buckets.len() > 60 {
-            if let Some((&bucket_index, _)) = self.buckets.iter().next() {
-                let bucket = self.buckets.remove(&bucket_index).unwrap();
+            let (_, bucket) = self.buckets.pop_first().unwrap();
 
-                for _ in 0..bucket.sent {
-                    if let Some((&seqno, _)) = self.send_times.iter().next() {
-                        self.send_times.remove(&seqno);
-                    }
+            for _ in 0..bucket.sent {
+                if let Some((&seqno, _)) = self.sent_packets.iter().next() {
+                    self.sent_packets.remove(&seqno);
                 }
             }
         }
@@ -94,20 +93,36 @@ impl StatsCalculator {
         let mut total_latency = 0.0f64;
         let mut total_latency_squared = 0.0f64;
 
-        // for bucket in self.buckets.values() {
-        //     total_samples += bucket.acked;
-        //     total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
-        //     total_latency += bucket.latency_sum;
-        //     total_latency_squared += bucket.latency_squared_sum;
-        //     log::debug!(
-        //         "bucket acked = {}, lost {}, sent {}",
-        //         bucket.acked,
-        //         bucket.lost,
-        //         bucket.sent
-        //     );
-        // }
+        let mut all_buckets: Vec<Bucket> = self.buckets.values().copied().collect();
+        all_buckets.sort_unstable_by_key(|b| b.sent);
+        let threshold = if all_buckets.is_empty() {
+            0
+        } else {
+            all_buckets[all_buckets.len() * 9 / 10].sent
+        } * 9
+            / 10;
+
+        log::debug!("threshold to ignore is {} in one bucket", threshold);
+
+        for bucket in self.buckets.values() {
+            if bucket.sent >= threshold {
+                continue;
+            }
+
+            total_samples += bucket.acked;
+            total_loss += (bucket.lost as f64) / ((bucket.acked + bucket.lost) as f64).max(1.0);
+            total_latency += bucket.latency_sum;
+            total_latency_squared += bucket.latency_squared_sum;
+            log::debug!(
+                "bucket acked = {}, lost {}, sent {}",
+                bucket.acked,
+                bucket.lost,
+                bucket.sent
+            );
+        }
 
         let total_samples = total_samples.max(1);
+
         let average_loss = total_loss / (self.buckets.len() as f64).max(1.0);
         let average_latency = total_latency / (total_samples as f64);
         let average_latency_squared = total_latency_squared / (total_samples as f64);
