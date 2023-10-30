@@ -107,8 +107,7 @@ impl StatsCalculator {
         //     );
         // }
 
-        // let total_samples = total_samples.max(1);
-
+        let total_samples = total_samples.max(1);
         let average_loss = total_loss / (self.buckets.len() as f64).max(1.0);
         let average_latency = total_latency / (total_samples as f64);
         let average_latency_squared = total_latency_squared / (total_samples as f64);
