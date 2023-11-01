@@ -129,7 +129,9 @@ impl StatsCalculator {
         let average_latency = total_latency / (total_samples as f64);
         let average_latency_squared = total_latency_squared / (total_samples as f64);
         let jitter = Duration::from_secs_f64(
-            (average_latency_squared - average_latency.powi(2).max(0.0)).sqrt(),
+            (average_latency_squared - average_latency.powi(2))
+                .max(0.0)
+                .sqrt(),
         );
 
         log::debug!("average_loss = {average_loss}");
