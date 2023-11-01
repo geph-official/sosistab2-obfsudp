@@ -35,7 +35,7 @@ impl FecEncoder {
     pub async fn wait_parity(&mut self, loss: f64) -> Vec<ObfsUdpFrame> {
         self.timer.wait().await;
         self.timer.reset();
-        if loss < 0.03 {
+        if loss < 0.005 {
             self.unfecked.clear();
             smol::future::pending().await
         }
@@ -44,7 +44,7 @@ impl FecEncoder {
             return vec![];
         }
         // encode
-        let mut fec_encoder = FrameEncoder::new(5); // around 3 percent
+        let mut fec_encoder = FrameEncoder::new(1); // around 0.5 percent
         let first_frame_no = self.unfecked[0].0;
         let data_count = self.unfecked.len();
         let expanded = fec_encoder.encode(
