@@ -107,7 +107,7 @@ At this point, both client and server have agreed on the same `sess_key`. Both n
 
 ## "Steady state" frames
 
-Once the session is established, both sides have the other's host:port, as well as an upload symmetric key and download symmetric key. They now send frames of this format, stdcode-serialized and encrypted with the right key (e.g. an upload message `m` will be sent as `seal(up_key, m)`):
+Once the session is established, both sides have the other's host:port, as well as an upload symmetric key and download symmetric key. They now send frames of the format `(u64, SessionFrame)`, stdcode-serialized and encrypted with the right key (e.g. an upload message `m` will be sent as `seal(up_key, m)`):
 
 ```rust
 pub enum SessionFrame {
@@ -131,6 +131,8 @@ pub enum SessionFrame {
 
 ```
 
+The `u64` attached to the SessionFrame increases by 1 for every sent packet, and the receiver must use this to implement replay attack prevention.
+
 We discuss the three kinds of frames separately:
 
 ### Data frames
@@ -145,8 +147,6 @@ Every datagram is split into fragments of the format:
 
 For example, a datagram of 12345 bytes will be split into 10 fragments, with the first fragment containing the header `00 19` and the first 1340 bytes of the datagram, the second fragment containing the header `09 19` and the next 1340 bytes, and so on. These fragments will then individually be encoded as bodies of `Data` frames.
 
-**Note on replay protection**: The `seqno` in `Data` frames should start at 0 and increase for every subsequent frame. The receiver _must_ refuse to process any messages with duplicate `seqno`s; this is crucial for avoiding replay attacks. Given that some packet reordering by the network may happen, this is non-trivial; a sliding-window approach is recommended to avoid unbounded memory usage.
-
 ### Parity frames
 
 Parity frames are use for forward error correction (FEC), based on 8-bit Reed-Solomon. The important thing to note here is that the sender of data **does not** pick which Reed-Solomon encoding to use beforehand (say, expand 5 data frames to 5 data + 3 parity). Instead, it only needs to pick the encoding once it decides to send parity frames, and at that point dynamically change the encoding.
@@ -159,8 +159,6 @@ This is reflected in the format of the parity frames. Each parity frame essentia
 - `parity_index`: This parity frame's index. (e.g. 0 means this is the first parity frame)
 - `pad_size`: The uniform size that all of the frames must be padded to, for Reed-Solomon decoding (note that RS requires every data and parity packet to be the same size)
 - `body`: The parity data itself.
-
-**Note on replay protection**: Here, there is no seqno to straighforwardly deduplicate. Replay protection is instead done this way: every time a batch of `Data` frames is reconstructed through the help of parity frames, those frames must have their `seqno`s checked just as if they were directly received.
 
 ### Ack frames
 

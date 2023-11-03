@@ -4,9 +4,9 @@ use std::sync::{
 };
 
 use bytes::Bytes;
-use parking_lot::Mutex;
+
 use rand::{Rng, RngCore};
-use replay_filter::ReplayFilter;
+
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
 use sosistab2::crypt::AeadError;
 use stdcode::StdcodeSerializeExt;
@@ -41,14 +41,14 @@ impl ObfsEncrypter {
 #[derive(Clone)]
 pub struct ObfsDecrypter {
     inner: ObfsAead,
-    dedupe: Arc<Mutex<ReplayFilter>>,
+    dedupe: Arc<AtomicU64>,
 }
 
 impl ObfsDecrypter {
     pub fn new(inner: ObfsAead) -> Self {
         Self {
             inner,
-            dedupe: Mutex::new(ReplayFilter::default()).into(),
+            dedupe: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -56,8 +56,8 @@ impl ObfsDecrypter {
     pub fn decrypt(&self, b: &[u8]) -> anyhow::Result<ObfsUdpFrame> {
         let ptext = self.inner.decrypt(b)?;
         let (outer_seqno, frame): (u64, ObfsUdpFrame) = stdcode::deserialize(&ptext)?;
-        if !self.dedupe.lock().add(outer_seqno) {
-            anyhow::bail!("rejecting duplicate outer_seqno {outer_seqno}")
+        if self.dedupe.fetch_max(outer_seqno, Ordering::SeqCst) >= outer_seqno {
+            anyhow::bail!("rejecting out-of-order outer_seqno {outer_seqno}")
         }
         Ok(frame)
     }

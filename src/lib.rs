@@ -16,7 +16,7 @@ pub use listener::ObfsUdpListener;
 use parking_lot::Mutex;
 use priority_queue::PriorityQueue;
 use rand::rngs::OsRng;
-use replay_filter::ReplayFilter;
+
 use serde::{Deserialize, Serialize};
 use smol::{
     channel::{Receiver, Sender},
@@ -189,8 +189,6 @@ async fn pipe_loop(
     let mut loss = 0.0;
     let mut loss_time: Option<Instant> = None;
 
-    let mut data_replay_filter = ReplayFilter::default();
-    let mut ack_replay_filter = ReplayFilter::default();
     loop {
         let loss = if loss_time.map(|t| t.elapsed().as_secs() > 0).unwrap_or(true) {
             loss = stats_calculator.lock().get_stats().loss;
@@ -226,25 +224,23 @@ async fn pipe_loop(
                 Event::NewInPacket(pipe_frame) => match pipe_frame {
                     ObfsUdpFrame::Data { seqno, body } => {
                         stats_calculator.lock().set_dead(false);
-                        if data_replay_filter.add(seqno) {
-                            fec_decoder.insert_data(seqno, body.clone());
-                            if let Some(whole) = defrag.insert(seqno, body) {
-                                let _ = send_downraw.try_send(whole); // TODO why??
-                            }
-                            if seqno > last_incoming_seqno + 1 {
-                                log::trace!("gap in sequence numbers: {}", seqno);
-                                for gap_seqno in (last_incoming_seqno + 1)..seqno {
-                                    probably_lost_incoming.push(
-                                        gap_seqno,
-                                        Reverse(Instant::now() + Duration::from_millis(500)),
-                                    );
-                                }
-                            }
-                            last_incoming_seqno = seqno;
-                            ack_timer.increment();
-                            unacked_incoming.push((seqno, Instant::now()));
-                            probably_lost_incoming.remove(&seqno);
+                        fec_decoder.insert_data(seqno, body.clone());
+                        if let Some(whole) = defrag.insert(seqno, body) {
+                            let _ = send_downraw.try_send(whole); // TODO why??
                         }
+                        if seqno > last_incoming_seqno + 1 {
+                            log::trace!("gap in sequence numbers: {}", seqno);
+                            for gap_seqno in (last_incoming_seqno + 1)..seqno {
+                                probably_lost_incoming.push(
+                                    gap_seqno,
+                                    Reverse(Instant::now() + Duration::from_millis(500)),
+                                );
+                            }
+                        }
+                        last_incoming_seqno = seqno;
+                        ack_timer.increment();
+                        unacked_incoming.push((seqno, Instant::now()));
+                        probably_lost_incoming.remove(&seqno);
                     }
                     ObfsUdpFrame::Parity {
                         data_frame_first,
@@ -264,23 +260,19 @@ async fn pipe_loop(
                             fec_decoder.insert_parity(parity_info, parity_index, body);
                         if !reconstructed.is_empty() {
                             for (seqno, p) in reconstructed {
-                                if data_replay_filter.add(seqno) {
-                                    if let Some(p) = defrag.insert(seqno, p) {
-                                        let _ = send_downraw.try_send(p);
-                                    }
+                                if let Some(p) = defrag.insert(seqno, p) {
+                                    let _ = send_downraw.try_send(p);
                                 }
                             }
                         }
                     }
                     ObfsUdpFrame::Acks { acks, naks } => {
                         let mut stats = stats_calculator.lock();
-                        if acks.iter().all(|(a, _)| ack_replay_filter.add(*a)) {
-                            for (seqno, offset) in acks {
-                                stats.add_ack(seqno, Duration::from_millis(offset as _));
-                            }
-                            for seqno in naks {
-                                stats.add_nak(seqno);
-                            }
+                        for (seqno, offset) in acks {
+                            stats.add_ack(seqno, Duration::from_millis(offset as _));
+                        }
+                        for seqno in naks {
+                            stats.add_nak(seqno);
                         }
                     }
                 },

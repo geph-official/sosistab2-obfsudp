@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use bytes::{Bytes};
-
+use bytes::Bytes;
 
 /// A "defragmenter" that takes in fragmented packets and reassembles them.
 #[derive(Default)]
@@ -28,7 +27,7 @@ impl Defragmenter {
         }
         let key = raw_seqno - (curr_idx as u64);
 
-        let mut buffer = self.batches.entry(key).or_default();
+        let buffer = self.batches.entry(key).or_default();
         buffer.0 += 1;
         buffer.1.resize_with(total_count as usize, Bytes::new);
         buffer.1[curr_idx as usize] = frag.slice(2..);
