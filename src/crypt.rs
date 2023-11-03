@@ -56,7 +56,8 @@ impl ObfsDecrypter {
     pub fn decrypt(&self, b: &[u8]) -> anyhow::Result<ObfsUdpFrame> {
         let ptext = self.inner.decrypt(b)?;
         let (outer_seqno, frame): (u64, ObfsUdpFrame) = stdcode::deserialize(&ptext)?;
-        if self.dedupe.fetch_max(outer_seqno, Ordering::SeqCst) >= outer_seqno {
+        log::warn!("outer_seqno {outer_seqno}");
+        if self.dedupe.fetch_max(outer_seqno + 1, Ordering::SeqCst) > outer_seqno {
             anyhow::bail!("rejecting out-of-order outer_seqno {outer_seqno}")
         }
         Ok(frame)
