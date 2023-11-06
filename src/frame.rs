@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Encodes a buffer into multiple smaller "fragments". A fragment is prepended with two bytes: how many fragments in total, and which fragment this fragment is.
 pub fn fragment(buff: Bytes, out: &mut Vec<Bytes>) {
-    let limit = (buff.len() as f64 / (buff.len() as f64 / 1340.0).ceil()).ceil() as usize;
+    let limit = (buff.len() as f64 / (buff.len() as f64 / 1300.0).ceil()).ceil() as usize;
     // TODO: reuse the memory somehow?
     let chunk_count = buff.len() / limit + (buff.len() % limit).min(1);
     for (i, chunk) in buff.chunks(limit).enumerate() {

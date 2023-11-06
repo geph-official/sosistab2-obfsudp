@@ -20,6 +20,7 @@ pub struct StatsCalculator {
 }
 
 const BUCKET_SIZE_MS: u64 = 5000;
+const BUCKET_COUNT: usize = 10;
 
 static START: Lazy<Instant> = Lazy::new(Instant::now);
 
@@ -71,7 +72,7 @@ impl StatsCalculator {
         self.sent_packets.insert(seqno, sent_time);
 
         // If we have too many buckets, remove the oldest one
-        if self.buckets.len() > 60 {
+        if self.buckets.len() > BUCKET_COUNT {
             let (_, bucket) = self.buckets.pop_first().unwrap();
 
             for _ in 0..bucket.sent {
