@@ -1,7 +1,8 @@
 use std::{
     net::SocketAddr,
+    os::unix::process,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use super::{listener_table::PipeTable, ObfsUdpSecret};
@@ -88,11 +89,12 @@ async fn listener_loop(
         b
     };
 
-    if std::env::var("SOSISTAB2_NO_SLEEP").is_err() {
+    let process_deadline = if std::env::var("SOSISTAB2_NO_SLEEP").is_ok() {
+        Instant::now()
+    } else {
         log::warn!("sleeping 60 seconds to prevent replays...");
-        smol::Timer::after(Duration::from_secs(60)).await;
-        log::warn!("finished sleeping 60 seconds to prevent replays!");
-    }
+        Instant::now() + Duration::from_secs(60)
+    };
 
     loop {
         let mut buf = [0u8; 2048];
@@ -111,6 +113,7 @@ async fn listener_loop(
                 &token_key,
                 pkt,
                 &mut table,
+                process_deadline,
             )
             .await
             {
@@ -134,6 +137,7 @@ async fn handle_server_handshake(
     token_key: &[u8; 32],
     pkt: &[u8],
     table: &mut PipeTable,
+    process_deadline: Instant,
 ) -> anyhow::Result<()> {
     // NOTE: we must tread carefully here to avoid responding to replayed messages, because c2s_outer does not protect against any form of replay attack. REPLAY_FILTER only protects against replays that are replayed within 10 minutes or so; beyond that we are on our own.
     // There are three cases here to consider:
@@ -144,6 +148,9 @@ async fn handle_server_handshake(
     log::debug!("it really was a handshake!");
     if REPLAY_FILTER.lock().recently_seen(&ptext) {
         anyhow::bail!("skipping packet catched by the replay filter!");
+    }
+    if Instant::now() <= process_deadline {
+        return Ok(());
     }
     let current_timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
