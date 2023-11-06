@@ -93,7 +93,7 @@ impl ObfsAead {
             .max_len
             .fetch_max(minimum_len, Ordering::Relaxed)
             .max(minimum_len);
-        let target_len = if msg.len() > 1300 {
+        let target_len = if msg.len() > 1000 {
             minimum_len
         } else {
             rand::thread_rng().gen_range(minimum_len, max_len + 1)
