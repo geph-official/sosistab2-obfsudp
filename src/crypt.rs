@@ -93,12 +93,9 @@ impl ObfsAead {
             .max_len
             .fetch_max(minimum_len, Ordering::Relaxed)
             .max(minimum_len);
-        let target_len = if msg.len() > 1000 {
-            minimum_len
-        } else {
-            rand::thread_rng().gen_range(minimum_len, max_len + 1)
-        }
-        .min(minimum_len + 255);
+        let target_len = rand::thread_rng()
+            .gen_range(minimum_len, max_len + 1)
+            .min(minimum_len + 255);
         let padding_len = target_len - minimum_len;
         let mut padded_msg = Vec::with_capacity(target_len);
         padded_msg.push(padding_len as u8);
