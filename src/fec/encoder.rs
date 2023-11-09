@@ -35,7 +35,7 @@ impl FecEncoder {
     pub async fn wait_parity(&mut self, loss: f64) -> Vec<ObfsUdpFrame> {
         self.timer.wait().await;
         self.timer.reset();
-        if loss < 0.03 {
+        if loss < 0.1 {
             self.unfecked.clear();
             smol::future::pending().await
         }
