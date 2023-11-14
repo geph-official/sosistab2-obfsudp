@@ -15,14 +15,14 @@ use stdcode::StdcodeSerializeExt;
 
 use super::frame::ObfsUdpFrame;
 
-/// An encrypter of obfuscated packets.
+/// An encrypter of obfuscated packets, with an anti-replay counter.
 #[derive(Clone)]
-pub struct ObfsEncrypter {
+pub struct CounterEncrypter {
     inner: ObfsAead,
     seqno: Arc<AtomicU64>,
 }
 
-impl ObfsEncrypter {
+impl CounterEncrypter {
     pub fn new(inner: ObfsAead) -> Self {
         Self {
             inner,
@@ -39,7 +39,7 @@ impl ObfsEncrypter {
     }
 }
 
-/// A decrypter of obfuscated packets.
+/// A decrypter of obfuscated packet, that checks the anti-replay counter.
 #[derive(Clone)]
 pub struct ObfsDecrypter {
     inner: ObfsAead,
@@ -199,6 +199,45 @@ mod tests {
             // Decrypt the encrypted message
             let decrypted_result = obfs_aead.decrypt(&encrypted_msg).unwrap();
             assert_eq!(&decrypted_result[..], &msg);
+        }
+    }
+
+    #[test]
+    fn test_replay_protection() {
+        // Generate a random key
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+
+        // Create an ObfsAead instance for encryption/decryption
+        let obfs_aead = ObfsAead::new(&key);
+
+        // Create a CounterEncrypter instance
+        let counter_encrypter = CounterEncrypter::new(obfs_aead.clone());
+
+        // Create an ObfsDecrypter instance
+        let obfs_decrypter = ObfsDecrypter::new(obfs_aead.clone());
+
+        // Create a test frame with random data
+        let test_frame = ObfsUdpFrame::Data {
+            seqno: 0, // This will be overridden by the CounterEncrypter
+            body: Bytes::from_iter(std::iter::repeat_with(rand::random::<u8>).take(50)),
+        };
+
+        // Encrypt the frame to produce a message
+        let encrypted_msg = counter_encrypter.encrypt(&test_frame);
+
+        // Decrypt the message for the first time, this should succeed
+        let decrypted_frame_result = obfs_decrypter.decrypt(&encrypted_msg);
+        assert!(decrypted_frame_result.is_ok());
+
+        // Attempt to decrypt the message a second time, this should fail
+        let replay_result = obfs_decrypter.decrypt(&encrypted_msg);
+        assert!(replay_result.is_err());
+
+        // To be thorough, we could also check that the error is specifically about the replay attack
+        match replay_result {
+            Err(err) => assert!(err.to_string().contains("rejecting duplicate outer_seqno")),
+            _ => panic!("Expected an error for replayed message, but got successful decryption"),
         }
     }
 }

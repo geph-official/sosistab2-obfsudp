@@ -10,7 +10,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use crate::crypt::{dnify_shared_secret, upify_shared_secret, ObfsAead};
 
 use super::{
-    crypt::{ObfsDecrypter, ObfsEncrypter},
+    crypt::{CounterEncrypter, ObfsDecrypter},
     frame::ObfsUdpFrame,
 };
 
@@ -45,7 +45,7 @@ impl PipeTable {
     ) {
         let up_key = upify_shared_secret(sess_key);
         let dn_key = dnify_shared_secret(sess_key);
-        let encrypter = ObfsEncrypter::new(ObfsAead::new(dn_key.as_bytes()));
+        let encrypter = CounterEncrypter::new(ObfsAead::new(dn_key.as_bytes()));
         let decrypter = ObfsDecrypter::new(ObfsAead::new(up_key.as_bytes()));
 
         // start down-forwarding actor
@@ -85,7 +85,7 @@ async fn dn_forward_loop(
     table: Arc<RwLock<HashMap<SocketAddr, PipeBack>>>,
     socket: UdpSocket,
     client_addr: SocketAddr,
-    encrypter: ObfsEncrypter,
+    encrypter: CounterEncrypter,
     recv_upcoded: Receiver<ObfsUdpFrame>,
 ) -> anyhow::Result<()> {
     scopeguard::defer!({
