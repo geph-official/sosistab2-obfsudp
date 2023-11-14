@@ -43,7 +43,7 @@ pub struct ObfsUdpPipe {
     peer_metadata: String,
 }
 
-const FEC_TIMEOUT_MS: u64 = 20;
+const FEC_TIMEOUT_MS: u64 = 50;
 use self::{
     defrag::Defragmenter,
     fec::{FecDecoder, FecEncoder, ParitySpaceKey},
@@ -53,7 +53,7 @@ use self::{
 
 use sosistab2::Pipe;
 
-const BURST_SIZE: usize = 20;
+const BURST_SIZE: usize = 40;
 
 /// A server public key for the obfuscated UDP pipe.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -250,6 +250,7 @@ async fn pipe_loop(
                         pad_size,
                         body,
                     } => {
+                        log::debug!("got parity; data_frame_first = {data_frame_first}, data_count = {data_count}, parity_count = {parity_count}, parity_index = {parity_index}");
                         let parity_info = ParitySpaceKey {
                             data_frame_first,
                             data_count,
@@ -260,6 +261,7 @@ async fn pipe_loop(
                             fec_decoder.insert_parity(parity_info, parity_index, body);
                         if !reconstructed.is_empty() {
                             for (seqno, p) in reconstructed {
+                                log::debug!("reconstructed outer {seqno}");
                                 if let Some(p) = defrag.insert(seqno, p) {
                                     let _ = send_downraw.try_send(p);
                                 }
