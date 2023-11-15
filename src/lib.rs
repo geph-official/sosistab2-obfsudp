@@ -177,7 +177,7 @@ async fn pipe_loop(
 ) -> Infallible {
     let mut next_seqno = 0;
 
-    let mut fec_encoder = FecEncoder::new(Duration::from_millis(FEC_TIMEOUT_MS), BURST_SIZE);
+    // let mut fec_encoder = FecEncoder::new(Duration::from_millis(FEC_TIMEOUT_MS), BURST_SIZE);
     let mut fec_decoder = FecDecoder::new(100); // arbitrary size
     let mut defrag = Defragmenter::default();
     let mut out_frag_buff = Vec::new();
@@ -190,14 +190,6 @@ async fn pipe_loop(
     let mut loss_time: Option<Instant> = None;
 
     loop {
-        let loss = if loss_time.map(|t| t.elapsed().as_secs() > 0).unwrap_or(true) {
-            loss = stats_calculator.lock().get_stats().loss;
-            loss_time = Some(Instant::now());
-            loss
-        } else {
-            loss
-        };
-
         let event = Event::ack_timeout(&mut ack_timer)
             .or(Event::new_in_packet(&recv_downcoded))
             .or(Event::new_out_payload(&recv_upraw))
@@ -212,7 +204,6 @@ async fn pipe_loop(
                         let seqno = next_seqno;
 
                         next_seqno += 1;
-                        fec_encoder.add_unfecked(seqno, bts.clone());
 
                         stats_calculator.lock().add_sent(seqno);
 
