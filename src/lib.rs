@@ -198,8 +198,7 @@ async fn pipe_loop(
             loss
         };
 
-        let event = Event::fec_timeout(&mut fec_encoder, loss)
-            .or(Event::ack_timeout(&mut ack_timer))
+        let event = Event::ack_timeout(&mut ack_timer)
             .or(Event::new_in_packet(&recv_downcoded))
             .or(Event::new_out_payload(&recv_upraw))
             .await;
