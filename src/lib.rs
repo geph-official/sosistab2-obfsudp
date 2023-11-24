@@ -43,7 +43,7 @@ pub struct ObfsUdpPipe {
     peer_metadata: String,
 }
 
-const FEC_TIMEOUT_MS: u64 = 50;
+const FEC_TIMEOUT_MS: u64 = 10;
 use self::{
     defrag::Defragmenter,
     fec::{FecDecoder, FecEncoder, ParitySpaceKey},
@@ -53,7 +53,7 @@ use self::{
 
 use sosistab2::Pipe;
 
-const BURST_SIZE: usize = 40;
+const BURST_SIZE: usize = 20;
 
 /// A server public key for the obfuscated UDP pipe.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -177,7 +177,7 @@ async fn pipe_loop(
 ) -> Infallible {
     let mut next_seqno = 0;
 
-    // let mut fec_encoder = FecEncoder::new(Duration::from_millis(FEC_TIMEOUT_MS), BURST_SIZE);
+    let mut fec_encoder = FecEncoder::new(Duration::from_millis(FEC_TIMEOUT_MS), BURST_SIZE);
     let mut fec_decoder = FecDecoder::new(100); // arbitrary size
     let mut defrag = Defragmenter::default();
     let mut out_frag_buff = Vec::new();
@@ -190,7 +190,8 @@ async fn pipe_loop(
     let mut loss_time: Option<Instant> = None;
 
     loop {
-        let event = Event::ack_timeout(&mut ack_timer)
+        let event = Event::fec_timeout(&mut fec_encoder, loss)
+            .or(Event::ack_timeout(&mut ack_timer))
             .or(Event::new_in_packet(&recv_downcoded))
             .or(Event::new_out_payload(&recv_upraw))
             .await;
