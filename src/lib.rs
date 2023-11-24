@@ -190,6 +190,14 @@ async fn pipe_loop(
     let mut loss_time: Option<Instant> = None;
 
     loop {
+        let loss = if loss_time.map(|t| t.elapsed().as_secs() > 5).unwrap_or(true) {
+            loss = stats_calculator.lock().get_stats().loss;
+            loss_time = Some(Instant::now());
+            loss
+        } else {
+            loss
+        };
+
         let event = Event::fec_timeout(&mut fec_encoder, loss)
             .or(Event::ack_timeout(&mut ack_timer))
             .or(Event::new_in_packet(&recv_downcoded))
