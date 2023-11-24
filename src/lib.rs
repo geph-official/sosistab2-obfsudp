@@ -213,6 +213,7 @@ async fn pipe_loop(
                         let seqno = next_seqno;
 
                         next_seqno += 1;
+                        fec_encoder.add_unfecked(seqno, bts.clone());
 
                         stats_calculator.lock().add_sent(seqno);
 
