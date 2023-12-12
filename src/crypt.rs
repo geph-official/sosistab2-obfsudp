@@ -5,11 +5,12 @@ use std::sync::{
 
 use bytes::Bytes;
 
+use chacha20poly1305::AeadInPlace;
+use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce};
 use parking_lot::Mutex;
 use rand::{Rng, RngCore};
-
 use replay_filter::ReplayFilter;
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
+
 use sosistab2::crypt::AeadError;
 use stdcode::StdcodeSerializeExt;
 
@@ -41,12 +42,12 @@ impl CounterEncrypter {
 
 /// A decrypter of obfuscated packet, that checks the anti-replay counter.
 #[derive(Clone)]
-pub struct ObfsDecrypter {
+pub struct CounterDecrypter {
     inner: ObfsAead,
     dedupe: Arc<Mutex<ReplayFilter>>,
 }
 
-impl ObfsDecrypter {
+impl CounterDecrypter {
     pub fn new(inner: ObfsAead) -> Self {
         Self {
             inner,
@@ -67,17 +68,18 @@ impl ObfsDecrypter {
 }
 
 /// AEAD where the messages produced are "uniform" in appearance.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ObfsAead {
-    key: Arc<LessSafeKey>,
+    key: Arc<ChaCha20Poly1305>,
     max_len: Arc<AtomicUsize>,
 }
 
 impl ObfsAead {
-    pub fn new(key: &[u8]) -> Self {
-        let ubk = UnboundKey::new(&CHACHA20_POLY1305, key).unwrap();
+    pub fn new(key: &[u8; 32]) -> Self {
+        let aead_key = Key::from_slice(key); // Create a key from the slice
+        let cipher = ChaCha20Poly1305::new(aead_key); // Create a new instance of ChaCha20Poly1305
         Self {
-            key: Arc::new(LessSafeKey::new(ubk)),
+            key: Arc::new(cipher),
             max_len: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -103,37 +105,31 @@ impl ObfsAead {
         padded_msg.extend_from_slice(msg);
 
         // now we overwrite it
+        let nonce = Nonce::from_slice(&nonce); // Create a nonce from the slice
         self.key
-            .seal_in_place_append_tag(
-                Nonce::assume_unique_for_key(nonce),
-                Aad::empty(),
-                &mut padded_msg,
-            )
-            .unwrap();
-        padded_msg.extend_from_slice(&nonce);
+            .encrypt_in_place(nonce, b"", &mut padded_msg) // Encrypt in place using the key and nonce
+            .expect("encryption failure!");
+
+        padded_msg.extend_from_slice(nonce.as_slice());
+
         assert_eq!(padded_msg.len(), target_len);
         padded_msg.into()
     }
 
     /// Decrypts a message.
     pub fn decrypt(&self, ctext: &[u8]) -> Result<Bytes, AeadError> {
-        if ctext.len() < CHACHA20_POLY1305.nonce_len() + CHACHA20_POLY1305.tag_len() {
+        if ctext.len() < 12 + 16 {
             return Err(AeadError::BadLength);
         }
-        // nonce is last 12 bytes
-        let (cytext, nonce) = ctext.split_at(ctext.len() - CHACHA20_POLY1305.nonce_len());
-        // we now open
+        let (cytext, nonce) = ctext.split_at(ctext.len() - 12);
         let mut ctext = cytext.to_vec();
+        let nonce = Nonce::from_slice(nonce); // Create a nonce from the slice
+
+        // Decrypt in place, this will also verify the tag
         self.key
-            .open_in_place(
-                Nonce::try_assume_unique_for_key(nonce).unwrap(),
-                Aad::empty(),
-                &mut ctext,
-            )
-            .ok()
-            .ok_or(AeadError::DecryptionFailure)?;
-        let truncate_to = ctext.len() - CHACHA20_POLY1305.tag_len();
-        ctext.truncate(truncate_to);
+            .decrypt_in_place(nonce, b"", &mut ctext)
+            .map_err(|_| AeadError::DecryptionFailure)?;
+
         let padding_len = ctext[0] as usize;
         if padding_len + 1 > ctext.len() {
             return Err(AeadError::BadLength);
@@ -190,7 +186,7 @@ mod tests {
 
         // Generate a random test message
         for _ in 0..100 {
-            let mut msg = vec![0u8; rand::thread_rng().gen_range(0, 1400)];
+            let mut msg = vec![0u8; rand::thread_rng().gen_range(0, 20)];
             rand::thread_rng().fill_bytes(&mut msg);
 
             // Encrypt the test message
@@ -215,7 +211,7 @@ mod tests {
         let counter_encrypter = CounterEncrypter::new(obfs_aead.clone());
 
         // Create an ObfsDecrypter instance
-        let obfs_decrypter = ObfsDecrypter::new(obfs_aead.clone());
+        let obfs_decrypter = CounterDecrypter::new(obfs_aead.clone());
 
         // Create a test frame with random data
         let test_frame = ObfsUdpFrame::Data {

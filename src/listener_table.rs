@@ -10,7 +10,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use crate::crypt::{dnify_shared_secret, upify_shared_secret, ObfsAead};
 
 use super::{
-    crypt::{CounterEncrypter, ObfsDecrypter},
+    crypt::{CounterDecrypter, CounterEncrypter},
     frame::ObfsUdpFrame,
 };
 
@@ -22,7 +22,7 @@ pub struct PipeTable {
 #[derive(Clone)]
 struct PipeBack {
     send_downcoded: Sender<ObfsUdpFrame>,
-    decrypter: ObfsDecrypter,
+    decrypter: CounterDecrypter,
 
     _task: Arc<smol::Task<anyhow::Result<()>>>,
 }
@@ -46,7 +46,7 @@ impl PipeTable {
         let up_key = upify_shared_secret(sess_key);
         let dn_key = dnify_shared_secret(sess_key);
         let encrypter = CounterEncrypter::new(ObfsAead::new(dn_key.as_bytes()));
-        let decrypter = ObfsDecrypter::new(ObfsAead::new(up_key.as_bytes()));
+        let decrypter = CounterDecrypter::new(ObfsAead::new(up_key.as_bytes()));
 
         // start down-forwarding actor
         let task = smolscale::spawn(dn_forward_loop(

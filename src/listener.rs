@@ -198,7 +198,7 @@ async fn handle_server_handshake(
         } => {
             let token_info = TokenInfo::decrypt(token_key, &resume_token)?;
             if token_info.init_timestamp.abs_diff(current_timestamp) > 60 {
-                anyhow::bail!("ClientResume replay detected!")
+                anyhow::bail!("Finalize replay detected!")
             }
             let (send_upcoded, recv_upcoded) = smol::channel::unbounded();
             let (send_downcoded, recv_downcoded) = smol::channel::unbounded();
@@ -237,7 +237,7 @@ struct TokenInfo {
 }
 
 impl TokenInfo {
-    fn decrypt(key: &[u8], encrypted: &[u8]) -> anyhow::Result<Self> {
+    fn decrypt(key: &[u8; 32], encrypted: &[u8]) -> anyhow::Result<Self> {
         // first we decrypt
         let crypter = ObfsAead::new(key);
         let plain = crypter.decrypt(encrypted)?;
@@ -245,7 +245,7 @@ impl TokenInfo {
         Ok(ctext)
     }
 
-    fn encrypt(&self, key: &[u8]) -> Bytes {
+    fn encrypt(&self, key: &[u8; 32]) -> Bytes {
         let crypter = ObfsAead::new(key);
         crypter.encrypt(&stdcode::serialize(self).expect("must serialize"))
     }

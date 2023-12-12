@@ -14,8 +14,8 @@ use stdcode::StdcodeSerializeExt;
 
 use crate::{
     crypt::{
-        dnify_shared_secret, triple_ecdh, upify_shared_secret, CounterEncrypter, ObfsAead,
-        ObfsDecrypter,
+        dnify_shared_secret, triple_ecdh, upify_shared_secret, CounterDecrypter, CounterEncrypter,
+        ObfsAead,
     },
     frame::{HandshakeFrame, ObfsUdpFrame},
     ObfsUdpPipe, ObfsUdpPublic,
@@ -146,7 +146,7 @@ pub async fn client_loop(
     let up_key = upify_shared_secret(shared_secret.as_bytes());
     let dn_key = dnify_shared_secret(shared_secret.as_bytes());
     let enc = CounterEncrypter::new(ObfsAead::new(up_key.as_bytes()));
-    let dec = ObfsDecrypter::new(ObfsAead::new(dn_key.as_bytes()));
+    let dec = CounterDecrypter::new(ObfsAead::new(dn_key.as_bytes()));
 
     let socket_up = socket.clone();
     let up_loop = async move {
